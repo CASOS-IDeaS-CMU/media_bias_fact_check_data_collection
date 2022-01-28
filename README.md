@@ -45,5 +45,5 @@ collector.conspiracy_pseudoscience_collection(outputfile='./conspiracy_output.cs
 ### 4. Questionable/Fake Collection
 To collect the Questionable/Fake news sources listed (https://mediabiasfactcheck.com/fake-news/):
 ```
-collection.questionable_sources_collection(outputfile='./questionable_output.csv', manual_corrections=False)
+collector.questionable_sources_collection(outputfile='./questionable_output.csv', manual_corrections=False)
 ```
