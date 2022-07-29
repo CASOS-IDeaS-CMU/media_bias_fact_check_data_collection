@@ -4,7 +4,7 @@ from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
-from data_standardization_helpers import get_url_from_news_title, get_bias_fact_cred, add_to_error_list, clean_url
+from data_standardization_helpers import get_url_from_news_title, get_bias_fact_cred, add_to_error_list, clean_url, get_bias_fact_cred_conspiracy_pseudo
 
 class MediaBiasFactCheckCollection():
     def __init__(self, username=None, password=None):
@@ -35,12 +35,12 @@ class MediaBiasFactCheckCollection():
         return
 
     def conspiracy_pseudoscience_collection(self, output_file='./conspiracy_output.csv', manual_corrections=False):
-        url_dict = self.__collect_urls_from_webpage('https://mediabiasfactcheck.com/conspiracy/', manual_corrections)
-        self.__output_urls_to_csv(url_dict, output_file, 'Conspiracy/Pseudoscience')
+        (url_dict, news_classifications_dict) = self.__collect_urls_from_webpage('https://mediabiasfactcheck.com/conspiracy/', manual_corrections)
+        self.__output_urls_to_csv(url_dict, news_classifications_dict, output_file, 'Conspiracy/Pseudoscience')
 
     def questionable_sources_collection(self, output_file='./questionable_output.csv', manual_corrections=False):
-        url_dict = self.__collect_urls_from_webpage('https://mediabiasfactcheck.com/fake-news/', manual_corrections)
-        self.__output_urls_to_csv(url_dict, output_file, 'Questionable/Fake')
+        (url_dict, news_classifications_dict) = self.__collect_urls_from_webpage('https://mediabiasfactcheck.com/fake-news/', manual_corrections)
+        self.__output_urls_to_csv(url_dict, news_classifications_dict, output_file, 'Questionable/Fake')
 
 
 
@@ -57,7 +57,10 @@ class MediaBiasFactCheckCollection():
             try:
                 #go to the bias website and iterate over the news orgs listed, saving their titles and associated classifications
                 driver = self.__reset_browser(mbfc_url + bias, driver)
-                media_table = driver.find_element_by_id('mbfc-table')
+                try:
+                    media_table = driver.find_element_by_id('mbfc-table')
+                except:
+                    print("Error logging in or getting to bias page.")
                 media_table_len = len(media_table.find_elements_by_css_selector('a'))
                 for media_index in range(media_table_len):  
                     media_table = driver.find_element_by_id('mbfc-table')
@@ -82,9 +85,10 @@ class MediaBiasFactCheckCollection():
                             mbfc_dict[media_title] = news_bias_fact_cred_dict
                         else:
                             #if couldn't find classifications, save its bias and error instead
+                            print("couldn't find classifications")
                             mbfc_error_dict = add_to_error_list(media_title, "couldn't find classifications", mbfc_error_dict)
                             mbfc_dict[media_title] = {'Bias': url_bias_types[bias]}
-
+                        #if don't have url for the news source, try to locate it on the news org's page
                         media_url = get_url_from_news_title(media_title)
                         if(media_url == None): 
                             try:
@@ -92,6 +96,7 @@ class MediaBiasFactCheckCollection():
                                 media_url = source_url.find_element_by_css_selector('a').text
                                 media_url = clean_url(media_url)
                             except:
+                                print("couldn't find domain URL")
                                 mbfc_error_dict = add_to_error_list(media_title, "couldn't find domain URL", mbfc_error_dict)
                         if(media_url != None):
                             mbfc_dict[media_title]['URL'] = media_url
@@ -156,15 +161,15 @@ class MediaBiasFactCheckCollection():
         return driver
 
     def __write_in_text_box(self, driver, text_box_id, text_to_enter):
+        for i in range(3): driver.find_element_by_tag_name('body').send_keys(Keys.DOWN)
         text_box = driver.find_element_by_id(text_box_id)
         action = ActionChains(driver)
-        action.move_to_element(text_box).perform()
-        text_box.click()
+        action.move_to_element(text_box).click(text_box).perform()
         text_box.clear()
         time.sleep(0.1)
         text_box.click()
         action.send_keys(text_to_enter).perform()
-        time.sleep(0.2)
+        time.sleep(0.5)
         return
 
     def __add_missing_data(self, news_classifications_dict, error_dict):
@@ -205,8 +210,9 @@ class MediaBiasFactCheckCollection():
             write = csv.writer(file)
             write.writerows(output_data)
 
-
     def __collect_urls_from_webpage(self, url_to_go_to, manual_corrections):
+        mbfc_dict = {}
+
         url_dict = {}
         collected_counter = 0
         media_table_len = 100
@@ -221,13 +227,30 @@ class MediaBiasFactCheckCollection():
                     media_table = driver.find_element_by_id('mbfc-table')
                     media_elem = media_table.find_elements_by_css_selector('a')[media_index]
                     media_title = media_elem.text
+                    #if the news org hasn't already been saved (could happen if the driver had an error and had to restart),
+                    #go to the news org's page and pull available classifications
                     if(media_title not in url_dict):
                         print(media_title)
+                        driver.execute_script("arguments[0].click();", media_elem)
+                        time.sleep(1)
+                        report_text = []
+                        (report, sub_element_types) = self.__get_classification_element(driver)
+                        if(report == None): 
+                            (report, sub_element_types) = self.__get_classification_element(driver, check_alternative=True)
+                        if(report != None):
+                            report_text = []
+                            for sub_element_type in sub_element_types:
+                                for element in report.find_elements_by_css_selector(sub_element_type):
+                                    report_text.append(element.text)
+                            news_bias_fact_cred_dict = get_bias_fact_cred_conspiracy_pseudo(report_text)
+                            mbfc_dict[media_title] = news_bias_fact_cred_dict
+                        else:
+                            #don't save bias and fact errors bc many sources in these categories don't have those classifications
+                            print("couldn't find classifications")
+                        #if don't have url for the news source, try to locate it on the news org's page
                         media_url = get_url_from_news_title(media_title)
                         if (media_url == None):
                             try:
-                                driver.execute_script("arguments[0].click();", media_elem)
-                                time.sleep(1)
                                 try: source_url = driver.find_element_by_xpath("//p[contains(text(), 'Source:')]")
                                 except: source_url = driver.find_element_by_xpath("//span[contains(text(), 'Source:')]")
                                 media_url = source_url.find_element_by_css_selector('a').text
@@ -239,20 +262,27 @@ class MediaBiasFactCheckCollection():
                                     media_url = clean_url(media_url)
                                 else:
                                     media_url = ""
-                            #go back from the news org page to the main page
-                            driver.back()
-                            time.sleep(1)
+                        #go back from the news org page to the main page
                         if(media_url != None):
                             url_dict[media_title] = media_url
+                        driver.back()
+                        time.sleep(1)
             except:
                 print("Restarting driver")
         driver.close()
-        return url_dict
+        return (url_dict, mbfc_dict)
 
-    def __output_urls_to_csv(self, url_dict, output_file, type_title):
-        output_data = [['News Title', 'Domain', type_title]]
+
+    def __output_urls_to_csv(self, url_dict, news_classifications_dict, output_file, type_title):
+        output_data = [['News Title', 'Domain', type_title, 'Bias', 'Factual Rating', 'Credibility Rating']]
         for media_title, domain_url in url_dict.items():
-            output_data.append([media_title, domain_url, 'True'])
+            this_news_output = [media_title, domain_url, 'True', '', '', '']
+            if(media_title in news_classifications_dict):
+                news_data = news_classifications_dict[media_title]
+                if('Bias' in news_data): this_news_output[3] = news_data['Bias']
+                if('Factual' in news_data): this_news_output[4] = news_data['Factual']
+                if('Credibility' in news_data): this_news_output[5] = news_data['Credibility']
+            output_data.append(this_news_output)
         file = open(output_file, 'w', newline ='')
         with file:    
             write = csv.writer(file)
