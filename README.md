@@ -72,3 +72,18 @@ collector.questionable_sources_collection(output_file='./questionable_output.csv
     &nbsp;&nbsp;&nbsp;&nbsp;manual_corrections: True to be prompted to add data by hand that couldn't be collected automatically, False to skip over missing data <br />
 **Outputs:** <br />
     &nbsp;&nbsp;&nbsp;&nbsp; CSV file with the news organizations' titles, domains, and questionable/fake classifications<br />
+
+
+<br /><br />
+## Data Merging Functions
+
+### 1. Combine Multiple Output Files
+To merge data from multiple output files (bias, conspiracy/pseudoscience, or questionable/fake) into
+one output file with all data collected:
+```
+combine_data.py file1.csv file2.csv ....
+```
+**Inputs:** <br />
+    &nbsp;&nbsp;&nbsp;&nbsp; file_x.csv: the individual data files to combine (can include as many files as you want to combine)<br />
+**Outputs:** <br />
+    &nbsp;&nbsp;&nbsp;&nbsp; CSV file called 'combined_output.csv' with all of the news organizations' titles, domains, biases, factual ratings, credibility ratings, and relevant special categories <br />
